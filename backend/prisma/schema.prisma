@@ -1,0 +1,107 @@
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id               String    @id @default(auto()) @map("_id") @db.ObjectId
+  email            String    @unique
+  unsubscribeToken String    @unique @default(uuid())
+  isSubscribed     Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  products         Product[]
+}
+
+model Product {
+  id              String         @id @default(auto()) @map("_id") @db.ObjectId
+  url             String
+  name            String?
+  expectedPrice   Float
+  currentPrice    Float?
+  checkInterval   Int            // in minutes
+  status          ProductStatus  @default(PENDING)
+  site            String?        // "amazon", "flipkart", etc.
+  lastCheckedAt   DateTime?
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  userId          String         @db.ObjectId
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  priceChecks     PriceCheck[]
+  notifications   Notification[]
+  failureLogs     FailureLog[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([isActive])
+}
+
+enum ProductStatus {
+  PENDING
+  ABOVE_TARGET
+  TARGET_REACHED
+  SCRAPE_FAILED
+}
+
+model PriceCheck {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  price       Float?
+  success     Boolean
+  error       String?
+  checkedAt   DateTime @default(now())
+
+  productId   String   @db.ObjectId
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([checkedAt])
+}
+
+model SelectorCache {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  sitePattern String   @unique  // e.g., "amazon.in", "flipkart.com"
+  selector    String             // CSS selector or extraction rule
+  attribute   String?            // attribute name if needed
+  source      String   @default("auto") // "auto", "gemini"
+  successCount Int     @default(0)
+  failCount    Int     @default(0)
+  lastUsedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  type        String   @default("price_drop") // "price_drop", "back_in_stock"
+  sentAt      DateTime @default(now())
+  price       Float
+
+  productId   String   @db.ObjectId
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([sentAt])
+}
+
+model FailureLog {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  error       String
+  errorType   String?  // "network", "selector", "blocked", "timeout"
+  url         String
+  htmlSnippet String?
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  productId   String   @db.ObjectId
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([createdAt])
+}
