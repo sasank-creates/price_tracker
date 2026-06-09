@@ -40,8 +40,18 @@ export default function ProductCard({ product: initialProduct, onRefresh }) {
 
   // Keep local product in sync with parent updates (e.g. auto-refresh from page.js)
   useEffect(() => {
+    console.log(`[COMPONENT: ProductCard (${product.id})] Props updated. Syncing local state.`);
     setProduct(initialProduct);
   }, [initialProduct]);
+
+  useEffect(() => {
+    console.log(`[COMPONENT: ProductCard (${product.id})] Mounted.`);
+    return () => {
+      console.log(`[COMPONENT: ProductCard (${product.id})] Unmounted.`);
+      clearInterval(pollRef.current);
+      clearInterval(progressRef.current);
+    };
+  }, [product.id]);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -56,12 +66,16 @@ export default function ProductCard({ product: initialProduct, onRefresh }) {
    */
   const handleCheck = async () => {
     if (checking) return;
+    console.log(`[COMPONENT: ProductCard (${product.id})] Manual check initiated.`);
     setChecking(true);
     setCheckProgress(0);
 
     try {
+      console.log(`[COMPONENT: ProductCard (${product.id})] Dispatching checkNow API client request...`);
       await checkNow(product.id);
-    } catch {
+      console.log(`[COMPONENT: ProductCard (${product.id})] checkNow API request resolved. Starting progress animation & poll loop...`);
+    } catch (err) {
+      console.error(`[COMPONENT: ProductCard (${product.id})] checkNow API request failed:`, err.message);
       setChecking(false);
       showToast('Failed to trigger check', 'error');
       return;
@@ -83,12 +97,17 @@ export default function ProductCard({ product: initialProduct, onRefresh }) {
     const MAX_ATTEMPTS = 12; // 12 × 5s = 60s
     pollRef.current = setInterval(async () => {
       attempts++;
+      console.log(`[COMPONENT: ProductCard (${product.id})] Poll attempt ${attempts}/${MAX_ATTEMPTS}...`);
       try {
         const updated = await fetchProduct(product.id);
         // Price changed or status changed from PENDING
         const priceChanged = updated.currentPrice !== prevPrice && updated.currentPrice !== null;
         const statusChanged = updated.status !== 'PENDING' && product.status === 'PENDING';
+        
+        console.debug(`[COMPONENT: ProductCard (${product.id})] Poll response: status=${updated.status}, currentPrice=${updated.currentPrice} (previousPrice=${prevPrice})`);
+        
         if (priceChanged || statusChanged || updated.status === 'SCRAPE_FAILED') {
+          console.log(`[COMPONENT: ProductCard (${product.id})] Price/status change detected. Stopping poll loop.`);
           clearInterval(pollRef.current);
           clearInterval(progressRef.current);
           setCheckProgress(100);
@@ -106,11 +125,12 @@ export default function ProductCard({ product: initialProduct, onRefresh }) {
           }
           return;
         }
-      } catch {
-        // ignore poll errors, keep trying
+      } catch (pollErr) {
+        console.warn(`[COMPONENT: ProductCard (${product.id})] Poll check request error:`, pollErr.message);
       }
 
       if (attempts >= MAX_ATTEMPTS) {
+        console.warn(`[COMPONENT: ProductCard (${product.id})] Max check poll attempts reached without finding change.`);
         clearInterval(pollRef.current);
         clearInterval(progressRef.current);
         setChecking(false);
@@ -121,37 +141,33 @@ export default function ProductCard({ product: initialProduct, onRefresh }) {
     }, 5000);
   };
 
-  // Cleanup intervals on unmount
-  useEffect(() => {
-    return () => {
-      clearInterval(pollRef.current);
-      clearInterval(progressRef.current);
-    };
-  }, []);
-
   const handleDelete = async () => {
     if (!confirm('Delete this product?')) return;
+    console.log(`[COMPONENT: ProductCard (${product.id})] Deletion requested.`);
     try {
       await deleteProduct(product.id);
+      console.log(`[COMPONENT: ProductCard (${product.id})] Deleted successfully.`);
       if (onRefresh) onRefresh();
     } catch (err) {
+      console.error(`[COMPONENT: ProductCard (${product.id})] Deletion failed:`, err.message);
       showToast('Failed to delete', 'error');
-      console.error(err);
     }
   };
 
   const handleEdit = async () => {
+    console.log(`[COMPONENT: ProductCard (${product.id})] Submitting updates:`, editForm);
     try {
       const updated = await updateProduct(product.id, {
         expectedPrice: parseFloat(editForm.expectedPrice),
         checkInterval: parseInt(editForm.checkInterval),
       });
+      console.log(`[COMPONENT: ProductCard (${product.id})] Update succeeded:`, updated);
       setProduct(updated);
       setEditing(false);
       if (onRefresh) onRefresh();
     } catch (err) {
+      console.error(`[COMPONENT: ProductCard (${product.id})] Update failed:`, err.message);
       showToast('Failed to update', 'error');
-      console.error(err);
     }
   };
 
@@ -218,7 +234,10 @@ export default function ProductCard({ product: initialProduct, onRefresh }) {
           <div className="product-actions">
             <button
               className="btn btn-ghost btn-sm"
-              onClick={() => setShowChart(!showChart)}
+              onClick={() => {
+                console.log(`[COMPONENT: ProductCard (${product.id})] Toggled price chart visibility: ${!showChart}`);
+                setShowChart(!showChart);
+              }}
               title="Price history"
             >
               📈
@@ -239,7 +258,10 @@ export default function ProductCard({ product: initialProduct, onRefresh }) {
             </button>
             <button
               className="btn btn-ghost btn-sm"
-              onClick={() => setEditing(!editing)}
+              onClick={() => {
+                console.log(`[COMPONENT: ProductCard (${product.id})] Toggled edit mode: ${!editing}`);
+                setEditing(!editing);
+              }}
               title="Edit"
             >
               ✏️

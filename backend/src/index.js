@@ -22,6 +22,27 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
+
+// Request/Response Logger Middleware
+app.use((req, res, next) => {
+  const startTime = Date.now();
+  const { method, originalUrl, query, body } = req;
+  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+  console.log(`[HTTP] INCOMING ${method} ${originalUrl}`, {
+    ip,
+    query,
+    body: method !== 'GET' ? body : undefined
+  });
+
+  res.on('finish', () => {
+    const duration = Date.now() - startTime;
+    console.log(`[HTTP] OUTGOING ${method} ${originalUrl} - Status: ${res.statusCode} (${duration}ms)`);
+  });
+
+  next();
+});
+
 app.use(apiLimiter);
 
 // Health check

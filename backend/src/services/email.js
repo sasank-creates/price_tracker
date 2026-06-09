@@ -16,15 +16,18 @@ function getTransporter() {
 }
 
 async function sendPriceAlert({ to, productName, productUrl, currentPrice, expectedPrice, unsubscribeToken }) {
+  console.log(`[EMAIL SERVICE] sendPriceAlert starting: sending to="${to}", product="${productName}", currentPrice=₹${currentPrice}, expectedPrice=₹${expectedPrice}`);
   const transport = getTransporter();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   const unsubscribeUrl = `${appUrl}/api/unsubscribe/${unsubscribeToken}`;
   const checkedTime = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
   const savings = (expectedPrice - currentPrice).toLocaleString('en-IN');
 
+  console.debug(`[EMAIL SERVICE] Building email HTML for "${productName}" (Savings: ₹${savings}, Unsubscribe: ${unsubscribeUrl})`);
   const htmlContent = buildEmailHtml({ productName, productUrl, currentPrice, expectedPrice, checkedTime, unsubscribeUrl, savings });
 
   try {
+    console.debug(`[EMAIL SERVICE] Dispatching email through SMTP to "${to}"`);
     const info = await transport.sendMail({
       from: process.env.EMAIL_FROM || '"Price Tracker" <noreply@pricetracker.app>',
       to,
@@ -35,10 +38,10 @@ async function sendPriceAlert({ to, productName, productUrl, currentPrice, expec
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
       },
     });
-    logger.info(`Price alert email sent to ${to}`, { messageId: info.messageId });
+    logger.info(`[EMAIL SERVICE] Price alert email successfully sent to ${to}`, { messageId: info.messageId });
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    logger.error(`Failed to send email to ${to}: ${error.message}`);
+    logger.error(`[EMAIL SERVICE] Failed to send email to ${to}: ${error.message}`, { stack: error.stack });
     return { success: false, error: error.message };
   }
 }

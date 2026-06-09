@@ -9,21 +9,26 @@ export default function PriceChart({ productId, expectedPrice }) {
   const canvasRef = useRef(null);
 
   useEffect(() => {
+    console.log(`[COMPONENT: PriceChart (${productId})] Mounted.`);
     loadHistory();
+    return () => console.log(`[COMPONENT: PriceChart (${productId})] Unmounted.`);
   }, [productId]);
 
   useEffect(() => {
     if (history.length > 0 && canvasRef.current) {
+      console.log(`[COMPONENT: PriceChart (${productId})] History loaded. Triggering drawChart.`);
       drawChart();
     }
   }, [history]);
 
   const loadHistory = async () => {
+    console.log(`[COMPONENT: PriceChart (${productId})] Loading price history...`);
     try {
       const data = await fetchHistory(productId);
+      console.log(`[COMPONENT: PriceChart (${productId})] Price history loaded: ${data.length} records`);
       setHistory(data);
     } catch (err) {
-      console.error(err);
+      console.error(`[COMPONENT: PriceChart (${productId})] Error loading price history:`, err.message);
     } finally {
       setLoading(false);
     }

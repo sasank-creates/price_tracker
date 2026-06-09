@@ -19,7 +19,7 @@ build/
 .env.production.local
 backend/.env
 frontend/.env.local
-
+.env.example
 # Logs
 logs/
 backend/logs/

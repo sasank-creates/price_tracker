@@ -9,19 +9,23 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    console.log('[COMPONENT: AdminPage] Mounted. Loading stats and failure logs...');
     loadData();
+    return () => console.log('[COMPONENT: AdminPage] Unmounted.');
   }, []);
 
   const loadData = async () => {
+    console.log('[COMPONENT: AdminPage] loadData started...');
     try {
       const [statsData, failuresData] = await Promise.all([
         fetchAdminStats(),
         fetchFailures(),
       ]);
+      console.log('[COMPONENT: AdminPage] Stats and failure logs successfully loaded:', { stats: statsData, failuresCount: failuresData.failures ? failuresData.failures.length : 0 });
       setStats(statsData);
       setFailures(failuresData.failures || []);
     } catch (err) {
-      console.error('Failed to load admin data:', err);
+      console.error('[COMPONENT: AdminPage] Failed to load stats or failures:', err.message);
     } finally {
       setLoading(false);
     }

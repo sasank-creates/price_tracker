@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { addProduct } from '@/lib/api';
 
 export default function ProductForm({ onProductAdded }) {
@@ -13,8 +13,15 @@ export default function ProductForm({ onProductAdded }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Lifecycle log
+  useEffect(() => {
+    console.log('[COMPONENT: ProductForm] Mounted.');
+    return () => console.log('[COMPONENT: ProductForm] Unmounted.');
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log('[COMPONENT: ProductForm] Submitting new track request:', form);
     setError('');
     setLoading(true);
 
@@ -25,9 +32,11 @@ export default function ProductForm({ onProductAdded }) {
         email: form.email,
         checkInterval: parseInt(form.checkInterval),
       });
+      console.log('[COMPONENT: ProductForm] Product track registration succeeded:', product);
       setForm({ url: '', expectedPrice: '', email: '', checkInterval: '60' });
       if (onProductAdded) onProductAdded(product);
     } catch (err) {
+      console.error('[COMPONENT: ProductForm] Product track registration failed:', err.message);
       setError(err.message);
     } finally {
       setLoading(false);

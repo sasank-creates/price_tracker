@@ -1,8 +1,18 @@
 'use client';
 
+import { useEffect } from 'react';
 import ProductCard from './ProductCard';
 
 export default function ProductList({ products, onRefresh, refreshing, lastUpdated }) {
+  useEffect(() => {
+    console.log(`[COMPONENT: ProductList] Mounted with ${products ? products.length : 0} products.`);
+    return () => console.log('[COMPONENT: ProductList] Unmounted.');
+  }, []);
+
+  useEffect(() => {
+    console.log(`[COMPONENT: ProductList] Products prop updated: length=${products ? products.length : 0}`);
+  }, [products]);
+
   const timeStr = lastUpdated
     ? lastUpdated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : null;

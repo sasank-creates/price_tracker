@@ -29,11 +29,16 @@ function getClient() {
  */
 async function getGeminiFallback(html, url, site) {
   const client = getClient();
-  if (!client) return null;
+  if (!client) {
+    console.warn('[GEMINI SERVICE] Gemini generative client could not be initialized (missing API key?)');
+    return null;
+  }
 
+  console.log(`[GEMINI SERVICE] getGeminiFallback started for site: ${site}, URL: ${url}`);
   try {
     // Trim HTML to avoid token limits — send only the relevant portion
     const trimmedHtml = trimHtml(html);
+    console.debug(`[GEMINI SERVICE] Raw HTML length: ${html.length} chars -> Trimmed to: ${trimmedHtml.length} chars`);
 
     const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
@@ -53,30 +58,35 @@ Rules:
 HTML snippet:
 ${trimmedHtml}`;
 
+    console.debug('[GEMINI SERVICE] Sending request to Gemini API (gemini-1.5-flash)...');
     const result = await model.generateContent(prompt);
     const response = result.response.text();
+    console.debug(`[GEMINI SERVICE] Gemini API raw response text: "${response.trim()}"`);
 
     // Extract JSON from the response
     const jsonMatch = response.match(/\{[\s\S]*?\}/);
     if (!jsonMatch) {
-      logger.warn('Gemini response did not contain valid JSON');
+      console.warn('[GEMINI SERVICE] FAILED: Gemini response did not contain valid JSON block');
       return null;
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
-    logger.info('Gemini fallback response', { price: parsed.price, selector: parsed.selector });
+    console.log('[GEMINI SERVICE] Successfully extracted and parsed JSON from Gemini response', { price: parsed.price, selector: parsed.selector, attribute: parsed.attribute });
 
     if (parsed.price !== null && parsed.price !== undefined) {
+      const finalPrice = typeof parsed.price === 'number' ? parsed.price : parsePrice(String(parsed.price));
+      console.debug(`[GEMINI SERVICE] Resolved final numeric price: ${finalPrice}`);
       return {
-        price: typeof parsed.price === 'number' ? parsed.price : parsePrice(String(parsed.price)),
+        price: finalPrice,
         selector: parsed.selector || null,
         attribute: parsed.attribute || 'textContent',
       };
     }
 
+    console.warn('[GEMINI SERVICE] Gemini response price field is null or undefined');
     return null;
   } catch (error) {
-    logger.error(`Gemini fallback error: ${error.message}`, { url, site });
+    console.error(`[GEMINI SERVICE] Gemini fallback error: ${error.message}`, { url, site, stack: error.stack });
     return null;
   }
 }

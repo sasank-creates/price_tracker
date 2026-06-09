@@ -10,12 +10,18 @@ const prisma = new PrismaClient();
  */
 router.post('/:token', async (req, res) => {
   try {
+    console.log(`[UNSUBSCRIBE ROUTE] POST /:token request received with token: ${req.params.token}`);
+    console.debug(`[UNSUBSCRIBE ROUTE] Querying user by unsubscribeToken in DB`);
     const user = await prisma.user.findUnique({
       where: { unsubscribeToken: req.params.token },
     });
 
-    if (!user) return res.status(404).json({ error: 'Invalid unsubscribe token' });
+    if (!user) {
+      console.warn(`[UNSUBSCRIBE ROUTE] Invalid unsubscribeToken received: ${req.params.token}`);
+      return res.status(404).json({ error: 'Invalid unsubscribe token' });
+    }
 
+    console.debug(`[UNSUBSCRIBE ROUTE] Found user: ${user.email}. Updating subscription status to unsubscribed.`);
     await prisma.user.update({
       where: { id: user.id },
       data: { isSubscribed: false },
@@ -24,7 +30,7 @@ router.post('/:token', async (req, res) => {
     logger.info(`User unsubscribed: ${user.email}`);
     res.json({ success: true, message: 'You have been unsubscribed from price alerts.' });
   } catch (error) {
-    logger.error(`Unsubscribe error: ${error.message}`);
+    logger.error(`Unsubscribe error: ${error.message}`, { token: req.params.token, stack: error.stack });
     res.status(500).json({ error: 'Failed to unsubscribe' });
   }
 });
@@ -34,12 +40,18 @@ router.post('/:token', async (req, res) => {
  */
 router.get('/:token', async (req, res) => {
   try {
+    console.log(`[UNSUBSCRIBE ROUTE] GET /:token request received with token: ${req.params.token}`);
+    console.debug(`[UNSUBSCRIBE ROUTE] Querying user by unsubscribeToken in DB`);
     const user = await prisma.user.findUnique({
       where: { unsubscribeToken: req.params.token },
     });
 
-    if (!user) return res.status(404).send('Invalid unsubscribe link.');
+    if (!user) {
+      console.warn(`[UNSUBSCRIBE ROUTE] Invalid unsubscribeToken received: ${req.params.token}`);
+      return res.status(404).send('Invalid unsubscribe link.');
+    }
 
+    console.debug(`[UNSUBSCRIBE ROUTE] Found user: ${user.email}. Updating subscription status to unsubscribed.`);
     await prisma.user.update({
       where: { id: user.id },
       data: { isSubscribed: false },
@@ -53,7 +65,7 @@ router.get('/:token', async (req, res) => {
       </div></body></html>
     `);
   } catch (error) {
-    logger.error(`Unsubscribe GET error: ${error.message}`);
+    logger.error(`Unsubscribe GET error: ${error.message}`, { token: req.params.token, stack: error.stack });
     res.status(500).send('Something went wrong.');
   }
 });
