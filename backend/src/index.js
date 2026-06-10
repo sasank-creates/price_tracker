@@ -2,9 +2,10 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('./utils/prisma'); // shared singleton
 const { apiLimiter } = require('./utils/rateLimiter');
 const { startScheduler } = require('./services/scheduler');
+const { verifyTransporter } = require('./services/email');
 const logger = require('./utils/logger');
 
 // Routes
@@ -13,12 +14,11 @@ const adminRouter = require('./routes/admin');
 const checksRouter = require('./routes/checks');
 
 const app = express();
-const prisma = new PrismaClient();
 const PORT = process.env.PORT || 4000;
 
 // Middleware
 app.use(cors({
-  origin: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+  origin: process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -45,7 +45,7 @@ app.use((req, res, next) => {
 
 app.use(apiLimiter);
 
-// Health check
+// Health check — also useful as a Render uptime ping target
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
@@ -71,7 +71,14 @@ async function start() {
       logger.info(`Server running on port ${PORT}`);
     });
 
-    // Start the background scheduler
+    // Verify SMTP connection at startup so failures are visible in logs immediately
+    // rather than being discovered silently when the first alert should fire.
+    await verifyTransporter();
+
+    // Start the background scheduler (in-process cron).
+    // NOTE: On Render free tier this will die when the dyno sleeps.
+    // Use the POST /api/admin/run-checks endpoint with an external cron
+    // service (cron-job.org, Render Cron Job) as a more reliable alternative.
     startScheduler();
     logger.info('Background scheduler started');
   } catch (error) {

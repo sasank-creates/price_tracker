@@ -1,9 +1,8 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../utils/prisma'); // shared singleton — avoids connection pool exhaustion
 const logger = require('../utils/logger');
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 /**
  * POST /api/unsubscribe/:token - Unsubscribe from notifications

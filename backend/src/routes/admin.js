@@ -1,9 +1,45 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../utils/prisma'); // shared singleton — avoids connection pool exhaustion
+const { runScheduledChecks } = require('../services/scheduler');
 const logger = require('../utils/logger');
 
 const router = express.Router();
-const prisma = new PrismaClient();
+
+/**
+ * POST /api/admin/run-checks
+ *
+ * DEPLOYMENT FIX FOR RENDER FREE TIER:
+ * Render's free tier spins down the server after ~15 minutes of inactivity,
+ * killing the in-process node-cron scheduler. This endpoint allows an
+ * EXTERNAL cron service (e.g., cron-job.org, Render Cron Job, GitHub Actions)
+ * to trigger scheduled price checks via an HTTPS request instead.
+ *
+ * Setup:
+ * 1. Go to https://cron-job.org (free) or use Render's Cron Job service
+ * 2. Create a job that POSTs to: https://your-backend.onrender.com/api/admin/run-checks
+ * 3. Add the header: x-admin-key: <your ADMIN_SECRET env var value>
+ * 4. Set interval to every 60 minutes (or whatever you need)
+ *
+ * Set ADMIN_SECRET in Render's Environment Variables for security.
+ */
+router.post('/run-checks', async (req, res) => {
+  // Simple bearer token auth to prevent public abuse
+  const adminKey = process.env.ADMIN_SECRET;
+  const providedKey = req.headers['x-admin-key'] || req.query.key;
+
+  if (adminKey && providedKey !== adminKey) {
+    logger.warn('[ADMIN] Unauthorized /run-checks attempt');
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  logger.info('[ADMIN] /run-checks triggered via HTTP (external cron)');
+  // Run async — respond immediately so the external cron doesn't time out
+  runScheduledChecks().catch((err) =>
+    logger.error(`[ADMIN] run-checks error: ${err.message}`, { stack: err.stack })
+  );
+
+  res.json({ success: true, message: 'Scheduled checks triggered', timestamp: new Date().toISOString() });
+});
 
 /**
  * GET /api/admin/failures - List failed scrapes

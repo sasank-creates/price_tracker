@@ -1,11 +1,10 @@
 const { chromium } = require('playwright');
 const cheerio = require('cheerio');
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../utils/prisma'); // shared singleton — avoids connection pool exhaustion
 const { detectSite, getSelectorsForSite, parsePrice } = require('../utils/selectors');
 const { getGeminiFallback } = require('./gemini');
 const logger = require('../utils/logger');
 
-const prisma = new PrismaClient();
 
 // Browser instance reuse
 let browser = null;

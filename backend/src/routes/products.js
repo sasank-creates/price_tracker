@@ -1,12 +1,11 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../utils/prisma'); // shared singleton — avoids connection pool exhaustion
 const { checkProduct } = require('../services/scheduler');
 const { detectSite } = require('../utils/selectors');
 const { checkLimiter } = require('../utils/rateLimiter');
 const logger = require('../utils/logger');
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 /**
  * POST /api/products - Add a new product to monitor

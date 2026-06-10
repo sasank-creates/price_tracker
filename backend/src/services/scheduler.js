@@ -1,10 +1,8 @@
 const cron = require('node-cron');
-const { PrismaClient } = require('@prisma/client');
+const prisma = require('../utils/prisma'); // shared singleton — avoids connection pool exhaustion
 const { scrapePrice } = require('./scraper');
 const { sendPriceAlert } = require('./email');
 const logger = require('../utils/logger');
-
-const prisma = new PrismaClient();
 
 // Track running checks to prevent duplicates
 const runningChecks = new Set();
@@ -22,7 +20,15 @@ let cronJob = null;
  * Runs at the configured CRON_INTERVAL (default: every 5 minutes)
  */
 function startScheduler() {
-  const interval = process.env.CRON_INTERVAL || '*/5 * * * *';
+  // FIX: CRON_INTERVAL from env may have surrounding whitespace or quotes stripped
+  // inconsistently by cloud env var parsers. Trim and validate before use.
+  const rawInterval = (process.env.CRON_INTERVAL || '').trim();
+  const interval = rawInterval && cron.validate(rawInterval) ? rawInterval : '*/5 * * * *';
+
+  if (rawInterval && !cron.validate(rawInterval)) {
+    logger.warn(`[SCHEDULER] Invalid CRON_INTERVAL value "${rawInterval}" — falling back to '*/5 * * * *'`);
+  }
+
   logger.info(`Starting scheduler with interval: ${interval}`);
 
   cronJob = cron.schedule(interval, async () => {

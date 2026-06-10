@@ -3,33 +3,105 @@ const logger = require('../utils/logger');
 
 let transporter = null;
 
+/**
+ * Build and return the nodemailer transporter.
+ *
+ * KEY DEPLOYMENT FIX:
+ * Most cloud platforms (Render, Railway, Fly.io, etc.) BLOCK outbound SMTP
+ * connections on ports 587 and 465 to fight spam. This is why email works
+ * locally (residential ISPs allow SMTP) but silently fails in production.
+ *
+ * RECOMMENDED: Switch to a transactional email API (Resend, SendGrid, Mailgun).
+ * They use HTTPS (port 443) which is never blocked.
+ *
+ * If you still want to use Gmail SMTP, set SMTP_PORT=465 in Render's env vars
+ * (port 465 is more often open than 587 on cloud providers) and ensure
+ * EMAIL_PROVIDER=smtp is set.
+ */
 function getTransporter() {
   if (!transporter) {
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+
+    if (!smtpUser || !smtpPass) {
+      logger.error(
+        '[EMAIL] SMTP_USER or SMTP_PASS is not set in environment variables. ' +
+        'Emails will NOT be sent. Set these in Render > Environment.'
+      );
+    }
+
+    const port = parseInt(process.env.SMTP_PORT || '587');
+    // port 465 = implicit TLS (secure:true), anything else = STARTTLS (secure:false)
+    const secure = port === 465;
+
     transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_PORT === '465',
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      port,
+      secure,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass,
+      },
+      // Increase timeouts for cloud environments with higher latency
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 30000,
     });
   }
   return transporter;
 }
 
+/**
+ * Verify the SMTP connection at startup.
+ * Call this from index.js so you get a clear log message if email is broken
+ * rather than discovering it silently when the first alert should be sent.
+ */
+async function verifyTransporter() {
+  try {
+    const transport = getTransporter();
+    await transport.verify();
+    logger.info('[EMAIL] SMTP connection verified successfully');
+    return true;
+  } catch (error) {
+    logger.error(
+      `[EMAIL] SMTP connection FAILED: ${error.message}. ` +
+      'Emails will not be sent. On Render, port 587/465 may be blocked — ' +
+      'consider switching to Resend (https://resend.com) or SendGrid which use HTTPS.',
+      { stack: error.stack }
+    );
+    // Don't crash the server — price tracking still works without email
+    return false;
+  }
+}
+
 async function sendPriceAlert({ to, productName, productUrl, currentPrice, expectedPrice, unsubscribeToken }) {
-  console.log(`[EMAIL SERVICE] sendPriceAlert starting: sending to="${to}", product="${productName}", currentPrice=₹${currentPrice}, expectedPrice=₹${expectedPrice}`);
+  console.log(
+    `[EMAIL SERVICE] sendPriceAlert starting: to="${to}", product="${productName}", ` +
+    `currentPrice=₹${currentPrice}, expectedPrice=₹${expectedPrice}`
+  );
+
   const transport = getTransporter();
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+
+  // FIX: Use APP_URL (backend env var) not NEXT_PUBLIC_APP_URL (frontend var).
+  // NEXT_PUBLIC_APP_URL may not be set in the backend's Render environment,
+  // causing unsubscribe links to point to localhost:3000 in production emails.
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   const unsubscribeUrl = `${appUrl}/api/unsubscribe/${unsubscribeToken}`;
   const checkedTime = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
   const savings = (expectedPrice - currentPrice).toLocaleString('en-IN');
 
-  console.debug(`[EMAIL SERVICE] Building email HTML for "${productName}" (Savings: ₹${savings}, Unsubscribe: ${unsubscribeUrl})`);
+  console.debug(`[EMAIL SERVICE] Building email HTML for "${productName}" (savings: ₹${savings})`);
   const htmlContent = buildEmailHtml({ productName, productUrl, currentPrice, expectedPrice, checkedTime, unsubscribeUrl, savings });
+
+  // FIX: EMAIL_FROM must use the authenticated SMTP_USER address as fallback.
+  // If EMAIL_FROM is not set and defaults to noreply@pricetracker.app,
+  // Gmail rejects the send with "550 5.7.0: not authorized to send as this address".
+  const fromAddress = process.env.EMAIL_FROM || `"Price Tracker" <${process.env.SMTP_USER}>`;
 
   try {
     console.debug(`[EMAIL SERVICE] Dispatching email through SMTP to "${to}"`);
     const info = await transport.sendMail({
-      from: process.env.EMAIL_FROM || '"Price Tracker" <noreply@pricetracker.app>',
+      from: fromAddress,
       to,
       subject: `🎯 Price Drop: ${productName || 'Your product'} is now ₹${currentPrice.toLocaleString('en-IN')}!`,
       html: htmlContent,
@@ -84,4 +156,4 @@ function buildEmailHtml({ productName, productUrl, currentPrice, expectedPrice, 
 </td></tr></table></td></tr></table></body></html>`;
 }
 
-module.exports = { sendPriceAlert, getTransporter };
+module.exports = { sendPriceAlert, getTransporter, verifyTransporter };
